@@ -27,6 +27,7 @@ class ComposerStaticInitcd20875e6c8accc642509e1f6c819658
 
     public static $classMap = array (
         'CallAMI' => __DIR__ . '/../..' . '/classes/CallAMI.php',
+        'CallMeLogger' => __DIR__ . '/../..' . '/classes/CallMeLogger.php',
         'Globals' => __DIR__ . '/../..' . '/classes/Globals.php',
         'HelperFuncs' => __DIR__ . '/../..' . '/classes/HelperFuncs.php',
     );

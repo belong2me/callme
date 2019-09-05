@@ -1,15 +1,16 @@
 <?php
 /**
-* Class for working with PAMI  
-* @author Автор: ViStep.RU
-* @version 1.0
-* @copyright: ViStep.RU (admin@vistep.ru)
-**/
+ * Class for working with PAMI
+ * @author Автор: ViStep.RU
+ * @version 1.0
+ * @copyright: ViStep.RU (admin@vistep.ru)
+ **/
 
 use PAMI\Client\Impl\ClientImpl as PamiClient;
 /*
 * start: for events listener
 */
+
 use PAMI\Listener\IEventListener;
 use PAMI\Message\Event\EventMessage;
 use PAMI\Message\Event;
@@ -18,6 +19,7 @@ use PAMI\Message\Event\DialEndEvent;
 /*
 * end: for events listener
 */
+
 use PAMI\Message\Action\ListCommandsAction;
 use PAMI\Message\Action\ListCategoriesAction;
 use PAMI\Message\Action\CoreShowChannelsAction;
@@ -100,66 +102,85 @@ use PAMI\Message\Action\DongleResetAction;
 use PAMI\Message\Action\DongleSendUSSDAction;
 use PAMI\Message\Action\DongleSendPDUAction;
 
-class CallAMI {
+class CallAMI
+{
 
-	private $conf;
+    private $conf;
 
-	//set asterisk connection configuration
-	function __construct() {
-        $config = require(__DIR__.'/../config.php');
-		if (is_array($config)){
-			$this->conf = $config['asterisk'];
-		} else $this->conf = false;
+    /**
+     * CallAMI constructor.
+     * Set asterisk connection configuration
+     */
+    function __construct()
+    {
+        $config = require(__DIR__ . '/../config.php');
+        if (is_array($config)) {
+            $this->conf = $config['asterisk'];
+        } else {
+            $this->conf = [];
+        }
     }
 
-	/**
-	 * Originate call
-	 *
-	 * @param string $intNum 
-	 * @param string $CalledNumber 
-	 * @param string $tech - SIP/PJSIP etc
-	 * @param string $CallId - from bitrix
-	 *
-	 * @return mixed 
-	 */
-	public function OriginateCall($intNum, $CalledNumber, $tech, $CallId, $context){
-		$pamiClientOptions = $this->conf;
-		if (!$pamiClientOptions) return false;
-	    $pamiClient = new PamiClient($pamiClientOptions);
-		$originateMsg = new OriginateAction($tech.'/'.$intNum);
-		$originateMsg->setContext($context);
-		$originateMsg->setPriority('1');
-		$originateMsg->setExtension($CalledNumber);
-		$originateMsg->setAsync('true');
-		$originateMsg->setCallerId('CallMe');
-		//переменная с callid из битрикса
-		$originateMsg->setVariable('CallMeCALL_ID', $CallId);
-		$pamiClient->open();
-	    $result = $pamiClient->send($originateMsg);
-	    $pamiClient->close();
-	    return $result;
-	}
+    /**
+     * Originate call
+     *
+     * @param string $intNum
+     * @param string $CalledNumber
+     * @param string $tech - SIP/PJSIP etc
+     * @param string $CallId - from bitrix
+     * @param $context
+     * @param array $request
+     * @return mixed
+     * @throws \PAMI\Client\Exception\ClientException
+     */
+    public function OriginateCall($intNum, $CalledNumber, $tech, $CallId, $context, $request)
+    {
+        $pamiClientOptions = $this->conf;
+        if (!$pamiClientOptions) {
+            return false;
+        }
+        $pamiClient = new PamiClient($pamiClientOptions);
+        $originateMsg = new OriginateAction($tech . '/' . $intNum);
+        $originateMsg->setContext($context);
+        $originateMsg->setPriority('1');
+        $originateMsg->setExtension($CalledNumber);
+        $originateMsg->setAsync('true');
+        $originateMsg->setCallerId($CalledNumber);
+        //переменная с callid из битрикса
+        $originateMsg->setVariable('CallMeCALL_ID', $CallId);
+        $originateMsg->setVariable('CallMeIntNum', $intNum);
+        $originateMsg->setVariable('CallMeEntityType', $request['data']["CRM_ENTITY_TYPE"]);
+        $originateMsg->setVariable('CallMeEntityId', $request['data']["CRM_ENTITY_ID"]);
+        $pamiClient->open();
+        $result = $pamiClient->send($originateMsg);
+        $pamiClient->close();
+        return $result;
+    }
 
-	/**
-	 * Create new PamiClient 
-	 *
-	 * @return PamiClient
-	 */
-	public function NewPAMIClient(){
-		$pamiClientOptions = $this->conf;
-		if (!$pamiClientOptions) return false;
-	    $pamiClient = new PamiClient($pamiClientOptions);
-	    return $pamiClient;
-	}
+    /**
+     * Create new PamiClient
+     *
+     * @return bool|PamiClient
+     */
+    public function NewPAMIClient()
+    {
+        $pamiClientOptions = $this->conf;
 
-	/**
-	 * Close PAMI client connection
-	 *
-	 * @param PamiClient $pamiClient
-	 *
-	 * @return mixed
-	 */
-	public function ClosePAMIClient($pamiClient){
-	    return $pamiClient->close();
-	}
+        if (!$pamiClientOptions) {
+            return false;
+        }
+        return new PamiClient($pamiClientOptions);
+    }
+
+    /**
+     * Close PAMI client connection
+     *
+     * @param PamiClient $pamiClient
+     *
+     * @return mixed
+     */
+    public function ClosePAMIClient($pamiClient)
+    {
+        return $pamiClient->close();
+    }
 }

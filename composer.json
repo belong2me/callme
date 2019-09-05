@@ -1,12 +1,10 @@
 {
-
-	"require": {
-    	"marcelog/pami": "2.*"
-    },
-
-	"autoload": {
-	    "classmap": [
-	        "classes/"
-        ]
-    }
+  "require": {
+    "marcelog/pami": "2.*"
+  },
+  "autoload": {
+    "classmap": [
+      "classes/"
+    ]
+  }
 }

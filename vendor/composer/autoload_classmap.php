@@ -7,6 +7,7 @@ $baseDir = dirname($vendorDir);
 
 return array(
     'CallAMI' => $baseDir . '/classes/CallAMI.php',
+    'CallMeLogger' => $baseDir . '/classes/CallMeLogger.php',
     'Globals' => $baseDir . '/classes/Globals.php',
     'HelperFuncs' => $baseDir . '/classes/HelperFuncs.php',
 );

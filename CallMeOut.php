@@ -1,65 +1,140 @@
 <?php
+
 /**
-* CallMe calls handler for output calls   
-* @author Автор: ViStep.RU
-* @version 1.0
-* @copyright: ViStep.RU (admin@vistep.ru)
-*/
+ * CallMe calls handler for output calls
+ */
 
 require __DIR__ . '/vendor/autoload.php';
 
 $helper = new HelperFuncs();
 $callami = new CallAMI();
 
-//настройки
 $tech = $helper->getConfig('tech');
 $authToken = $helper->getConfig('authToken');
 $context = $helper->getConfig('context');
 
-//данные в запросе
 $request = $_REQUEST;
 
-//проверяем не пустой ли request
-if(!empty($request)){
-    //логируем запрос
-    $helper->writeToLog($request,'request');
-    if (!is_null($request['action'])){ //есть ли action
+$group_id = 34; // Группа для которой будут сохраняться звонки в Битрикс24
+
+// Проверяем не пустой ли request
+if (!empty($request)) {
+
+    // Определение группы сотрудника
+    $groups = [];
+    if (isset($request["CallIntNum"])) {
+        $groups = $helper->getUserGroups(['UF_PHONE_INNER' => intval($request["CallIntNum"])]);
+    } elseif (isset($request['data']['USER_ID'])) {
+        $groups = $helper->getUserGroups(['ID' => intval($request['data']['USER_ID'])]);
+    }
+
+    $groups = is_array($groups) ? $groups : [$groups];
+
+    if (!in_array($group_id, $groups)) {
+        die();
+    }
+
+    /**
+     * Если указано действие
+     */
+    if (!is_null($request['action'])) {
+
         switch ($request['action']) {
-            case 'sendcall2b24': //отправляем инфу о звонке в битрикс
-                $helper->writeToLog($request,'sendcall2b24 action');
-                if (is_null($request['call_id']) || is_null($request['FullFname']) || is_null($request['CallIntNum']) || is_null($request['CallDuration']) || is_null($request['CallDisposition'])){
-                    $helper->writeToLog($resultFromB24,'sendcall2b24 error in params');
+
+            /**
+             * Отправляем инфу о начале звонка в битрикс и возвращаем id
+             */
+            case 'sendcall2b24start':
+
+                $helper->writeToLog($request, $request['CallIntNum'], 'Начало звонка');
+
+                if (is_null($request['CallIntNum']) || is_null($request['CallerId'])) {
+                    $helper->writeToLog($request, $request['CallIntNum'], 'Ошибка в параметрах');
+                    exit("");
+                }
+
+                $result = false;
+                $arUser = $helper->getUserByIntNum($request['CallIntNum']);
+                $result = $helper->runOutputCall($request);
+
+                if ($result) {
+                    $helper->writeToLog($result, $request['CallIntNum'], 'Успешная отправка начала звонка в Битрикс');
+                    exit($result);
+                } else {
+                    $helper->writeToLog($result, $request['CallIntNum'], 'Ошибка отправки звонка в Битрикс');
+                    exit("");
+                }
+                break;
+
+            /**
+             * Отправляем инфу об окончании звонка в битрикс
+             */
+            case 'sendcall2b24end':
+
+                $helper->writeToLog($request, $request['CallIntNum'], 'Окончание звонка');
+
+                if (is_null($request['call_id']) || is_null($request['FullFname']) || is_null($request['CallIntNum']) || is_null($request['CallDuration']) || is_null($request['CallDisposition'])) {
+                    $helper->writeToLog($request, $request['CallIntNum'], 'Ошибка в параметрах');
                     exit('error in params');
                 }
-                $resultFromB24 = $helper->uploadRecordedFile($request['call_id'],$request['FullFname'],$request['CallIntNum'],$request['CallDuration'],$request['CallDisposition']); 
-                //логируем, что нам рассказал битрикс в ответ на наш реквест
-                $helper->writeToLog($resultFromB24,'sendcall2b24 upload call status');
-            break;
-            default:
-                $helper->writeToLog($request['event'],'Go fuck yourself');
+
+                $endOtputCall = $helper->endOutputCall($request['call_id'], $request['CallIntNum'], $request['CallDuration'], $request['CallDisposition']);
+                $uploadRecordedFile = $helper->uploadRecordedFile($request['call_id'], $request['FullFname'], $request['CallDisposition']);
+
+                $helper->writeToLog($endOtputCall, $request['CallIntNum'], 'Отправка данных о завершении звонка в битрикс');
+                $helper->writeToLog($uploadRecordedFile, $request['CallIntNum'], 'Отправка записи звонка в битрикс');
                 break;
-            }
+
+            /**
+             * Отправляем лесом
+             */
+            default:
+                $helper->writeToLog($request, $request['CallIntNum'], 'Действие не определено');
+                break;
+        }
+
     } else {
-        //проверяем авторизацию по токену
+
+        /**
+         * Действие не указано
+         * Проверяем авторизацию по токену
+         */
         if ($request['auth']['application_token'] === $authToken) {
-            $intNum = $helper->getIntNumByUSER_ID($request['data']['USER_ID']);
-            $helper->writeToLog($intNum,'intnum');
-            $CalledNumber = $request['data']['PHONE_NUMBER_INTERNATIONAL'];
-            $helper->writeToLog($CalledNumber,'CalledNumber');
+
+            $CalledNumber =  preg_replace("/[^0-9]/", '', $request['data']['PHONE_NUMBER_INTERNATIONAL']);
+            if (substr($CalledNumber, 0, 1) == '7') {
+                substr_replace($CalledNumber, '8', 0, 1);
+            }
+
+            $intNum = $helper->getIntNumByUserId($request['data']['USER_ID']);
             $CallID = $request['data']['CALL_ID'];
-            $helper->writeToLog($CallID,'CALL_ID');
-            //дергаем ивен, переданный из битрикса
+
+            $helper->writeToLog($request, $intNum, 'Запрос пришел из вебхука Битрикса. ID в Битрикс - ' . $CallID);
+
             switch ($request['event']) {
-                case 'ONEXTERNALCALLSTART': //внешний звонок
-                    $helper->writeToLog($request['event'],'ONEXTERNALCALLSTART');
-                    //отправляем на астериск
-                    $response = $callami->OriginateCall($intNum, $CalledNumber, $tech, $CallID, $context);
-                    $helper->writeToLog($response,'PAMI response');
-                    break; 
-                default:
-                    $helper->writeToLog($request['event'],'Go fuck yourself');
+
+                /**
+                 * Звонок из битрикса
+                 */
+                case 'ONEXTERNALCALLSTART':
+
+                    try {
+                        $response = $callami->OriginateCall($intNum, $CalledNumber, $tech, $CallID, $context, $request);
+                        $helper->showInputCall($intNum, $CallID);
+                        $helper->writeToLog($response->GetMessage(), $intNum, 'Событие OnExternalCallStart - Переадресация звонка на аппарат сотрудника');
+                    } catch (\PAMI\Client\Exception\ClientException $e) {
+                        $helper->writeToLog($response->GetMessage(), $intNum, 'Событие OnExternalCallStart - Ошибка');
+                    }
                     break;
-                }
-            } else $helper->writeToLog($request,'Not authorized!!!');
+
+                default:
+                    $helper->writeToLog($request, $intNum, 'Событие не определено');
+                    break;
+            }
+        } else {
+            $helper->writeToLog($request, $request['CallIntNum'], 'Не авторизован');
+        }
     }
-} else exit('error in params'); //если пустой request то отдаем ошибку в параметрах
+} else {
+    exit('Ты втираешь какую то дичь!');
+}
